@@ -113,7 +113,7 @@ html, body {
 .ghost-btn:hover { color: var(--text); border-color: var(--primary); }
 
 /* ---------- main ---------- */
-.main { padding: 0 26px 40px; max-width: 1200px; }
+.main { padding: 0 26px 40px; max-width: 1200px; min-width: 0; }
 
 .topbar {
   display: flex;
@@ -164,6 +164,7 @@ html, body {
 }
 
 .group-stack { display: flex; flex-direction: column; gap: var(--gap); }
+.group-stack:not(:empty) + .group-stack:not(:empty) { margin-top: var(--gap); }
 .group-card .group-head {
   display: flex; align-items: baseline; justify-content: space-between;
   margin-bottom: 14px;
@@ -192,6 +193,38 @@ html, body {
 .status-item.tone-ok .value { color: var(--ok); }
 .status-item.tone-warn .value { color: var(--warn); }
 .status-item.tone-err .value { color: var(--err); }
+
+/* tables (lists of like things: access points, clients) */
+.table-card .group-head {
+  display: flex; align-items: baseline; gap: 12px;
+  margin-bottom: 12px;
+}
+.table-card h3 { margin: 0; font-size: 15px; }
+.table-filter {
+  margin-left: auto;
+  background: var(--input-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-ctrl);
+  color: var(--text);
+  padding: 5px 10px;
+  font: inherit; font-size: 13px;
+  width: 180px; max-width: 45%;
+}
+.table-wrap { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.data-table th {
+  text-align: left; font-size: 12px; font-weight: 500; color: var(--text-soft);
+  padding: 6px 10px; border-bottom: 1px solid var(--card-border); white-space: nowrap;
+}
+.data-table th .unit { margin-left: 3px; }
+.data-table td { padding: 7px 10px; border-bottom: 1px solid var(--card-border); white-space: nowrap; }
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover td { background: var(--bg-elev); }
+.data-table .num { text-align: right; }
+.data-table tr.tone-ok td:first-child { box-shadow: inset 3px 0 0 var(--ok); }
+.data-table tr.tone-warn td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+.data-table tr.tone-err td { color: var(--err); }
+.data-table tr.tone-muted td { color: var(--text-soft); }
 
 .spaced { margin-top: var(--gap); }
 .card-title { margin: 0 0 14px; font-size: 15px; }

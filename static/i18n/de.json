@@ -45,5 +45,8 @@
   "toast.errorPrefix": "Fehler: ",
   "group.empty": "Noch keine Daten.",
   "group.age": "aktualisiert vor {age}",
-  "unit.seconds": "s"
+  "unit.seconds": "s",
+  "table.filter": "Filtern…",
+  "table.rows": "{n} Einträge",
+  "table.shown": "{n} von {total}"
 }

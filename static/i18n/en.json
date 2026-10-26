@@ -45,5 +45,8 @@
   "toast.errorPrefix": "Error: ",
   "group.empty": "No data yet.",
   "group.age": "updated {age} ago",
-  "unit.seconds": "s"
+  "unit.seconds": "s",
+  "table.filter": "Filter…",
+  "table.rows": "{n} rows",
+  "table.shown": "{n} of {total}"
 }

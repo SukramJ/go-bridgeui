@@ -59,6 +59,11 @@ go srv.Run(ctx)
 | `Write(ctx, device, key, value)` | the bridge's ordinary command path, errors classed by `ErrUnknownDevice` / `ErrNotWritable` / `ErrInvalidValue` / `ErrNotReady` |
 | `Changes()` | a coalesced change signal (`Notifier.Subscribe`) |
 
+A device can carry `Tables` (columns + rows) beside its entries — lists
+of like things, placed by `Section.Tables`. `Layout.Links` adds navigation
+entries to pages the bridge serves itself. A bridge with no writable item
+has no Control section.
+
 A bridge with an API of its own registers it through `Options.Routes`. The
 routes run behind the same auth and hardening. A mutating route is wrapped in
 `bridgeui.SameOrigin`. `Options.HealthProbe` makes `/api/health` answer 503

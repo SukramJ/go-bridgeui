@@ -5,6 +5,28 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-26
+
+### Added
+
+- Tables: `Device.Tables` carries lists of like things — a site's access
+  points, its clients — with typed columns (`Column.Format`: `duration`,
+  `age`, `bitrate`, `i18n`; `Align: "right"`) and toned rows.
+  `Section.Tables` places them; unclaimed tables go under System. From ten
+  rows on a table offers a filter, which keeps its focus across live
+  updates.
+- `Layout.Links`: navigation entries to pages a bridge serves itself
+  through `Options.Routes` (a schedule editor, a login).
+
+### Changed
+
+- An entry's name and a problem's event are looked up as i18n keys, like
+  tile labels; text that is no key shows as before.
+- The main column no longer grows past the viewport with a wide table;
+  the table scrolls instead.
+- A bridge without any writable item is read-only: the Control section and
+  its navigation entry are hidden.
+
 ## [0.2.0] - 2026-10-26
 
 ### Added
