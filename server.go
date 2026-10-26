@@ -48,6 +48,16 @@ type Options struct {
 	Language string
 	// Layout arranges the page.
 	Layout Layout
+	// Routes, when set, registers a bridge's own routes on the server's
+	// mux, behind the same auth, headers and write deadline. A pattern the
+	// server registers itself panics at New, like any duplicate on an
+	// http.ServeMux; a mutating route belongs in [SameOrigin]. Only
+	// /api/events is exempt from the response write deadline, so a
+	// bridge's own route cannot stream.
+	Routes func(mux *http.ServeMux)
+	// HealthProbe makes GET /api/health answer 503 unless the status is
+	// "ok", so it works as a readiness probe.
+	HealthProbe bool
 	// Translations extend and override the built-in bundles, per language
 	// ("en", "de"): the bridge's section, group, tile and status labels.
 	// [LoadTranslations] reads them from embedded JSON files.
@@ -99,6 +109,9 @@ func (s *Server) routes() *http.ServeMux {
 	// read-only and pose no CSRF risk.
 	mux.Handle("POST /api/write", s.requireSameOriginJSON(http.HandlerFunc(s.handleWrite)))
 	mux.HandleFunc("GET /api/events", s.handleEvents)
+	if s.cfg.Routes != nil {
+		s.cfg.Routes(mux)
+	}
 
 	// The SPA: index.html + app.css + app.js. http.FileServerFS serves
 	// "/" as index.html and 404s unknown paths — there is no client-side
@@ -187,8 +200,16 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 	})
 }
 
-// requireSameOriginJSON guards state-changing requests (currently only
-// POST /api/write) against cross-site submissions. A cross-site
+// SameOrigin guards a state-changing route against cross-site
+// submissions: the request must be application/json and same-origin. The
+// server applies it to POST /api/write; a bridge wraps its own mutating
+// routes ([Options.Routes]) in it.
+func SameOrigin(next http.Handler) http.Handler {
+	return sameOriginJSON(next)
+}
+
+// requireSameOriginJSON guards state-changing requests (POST /api/write)
+// against cross-site submissions. A cross-site
 // <form>/fetch POST that skips CORS preflight can only ever carry a
 // "simple" Content-Type (e.g. text/plain) — never application/json —
 // and the browser attaches Basic-Auth credentials automatically, so
@@ -196,10 +217,15 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 // Two independent checks close that gap; both are scoped to this one
 // handler so the read-only GET endpoints stay overhead-free.
 func (s *Server) requireSameOriginJSON(next http.Handler) http.Handler {
+	return sameOriginJSON(next)
+}
+
+// sameOriginJSON is the guard behind [SameOrigin].
+func sameOriginJSON(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		if err != nil || mediaType != "application/json" {
-			s.writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+			writePlainError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
 			return
 		}
 
@@ -209,7 +235,7 @@ func (s *Server) requireSameOriginJSON(next http.Handler) http.Handler {
 		// bookmarklet or address-bar navigation) are fine.
 		site := r.Header.Get("Sec-Fetch-Site")
 		if site != "" && site != "same-origin" && site != "none" {
-			s.writeError(w, http.StatusForbidden, "cross-site request rejected")
+			writePlainError(w, http.StatusForbidden, "cross-site request rejected")
 			return
 		}
 
@@ -238,7 +264,7 @@ func (s *Server) requireSameOriginJSON(next http.Handler) http.Handler {
 			if origin := r.Header.Get("Origin"); origin != "" {
 				originURL, err := url.Parse(origin)
 				if err != nil || (originURL.Host != r.Host && originURL.Host != r.Header.Get("X-Forwarded-Host")) {
-					s.writeError(w, http.StatusForbidden, "cross-origin request rejected")
+					writePlainError(w, http.StatusForbidden, "cross-origin request rejected")
 					return
 				}
 			}
