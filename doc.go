@@ -26,7 +26,10 @@
 //	GET  /api/events    SSE, "update" events carrying {health, snapshot}
 //	POST /api/write     {device, key, value}, JSON and same-origin only
 //	GET  /i18n/<lang>.json, /, /app.js, /app.css
+//
+// A bridge adds its own routes behind the same auth and hardening with
+// [Options.Routes], and guards a mutating one with [SameOrigin].
 package bridgeui
 
 // Version is the module's release, the fallback asset validator.
-const Version = "0.1.0"
+const Version = "0.2.0"

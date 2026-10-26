@@ -5,6 +5,18 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-26
+
+### Added
+
+- `Options.Routes`: a bridge registers its own routes on the server's
+  mux, behind the same Basic auth, hardening headers and write deadline —
+  for a documented API of its own beside the dashboard's.
+- `SameOrigin`: the JSON + same-origin guard of `POST /api/write`,
+  exported for a bridge's own mutating routes.
+- `Options.HealthProbe`: `GET /api/health` answers 503 unless the status
+  is `ok`, so it serves as a readiness probe.
+
 ## [0.1.0] - 2026-10-26
 
 ### Added

@@ -55,7 +55,12 @@ func (s *Server) liveView() liveView {
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
-	s.writeJSON(w, http.StatusOK, s.health())
+	h := s.health()
+	status := http.StatusOK
+	if s.cfg.HealthProbe && h.Status != "ok" {
+		status = http.StatusServiceUnavailable
+	}
+	s.writeJSON(w, status, h)
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
@@ -264,6 +269,14 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
 		s.log.Warn("web.response_encode_failed",
 			slog.Int("status", status), slog.String("err", err.Error()))
 	}
+}
+
+// writePlainError sends the JSON error envelope without a server at hand,
+// for the guards that also stand alone ([SameOrigin]).
+func writePlainError(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
 // writeError sends a small JSON error envelope.

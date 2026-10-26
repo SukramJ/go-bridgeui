@@ -59,6 +59,11 @@ go srv.Run(ctx)
 | `Write(ctx, device, key, value)` | the bridge's ordinary command path, errors classed by `ErrUnknownDevice` / `ErrNotWritable` / `ErrInvalidValue` / `ErrNotReady` |
 | `Changes()` | a coalesced change signal (`Notifier.Subscribe`) |
 
+A bridge with an API of its own registers it through `Options.Routes`. The
+routes run behind the same auth and hardening. A mutating route is wrapped in
+`bridgeui.SameOrigin`. `Options.HealthProbe` makes `/api/health` answer 503
+while the status is not `ok`.
+
 Labels on tiles and section titles are i18n keys. The built-in bundles
 (`static/i18n`) cover the page chrome. A bridge adds its own group, tile and
 section labels through `Options.Translations`.

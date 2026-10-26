@@ -254,3 +254,78 @@ func TestAssetsServed(t *testing.T) {
 		}
 	}
 }
+
+// A bridge's own routes sit behind the server's auth and headers, and a
+// mutating one guarded by SameOrigin refuses a foreign origin.
+func TestRoutesAndSameOrigin(t *testing.T) {
+	var posted int
+	ts := newTestServer(Options{User: "u", Password: "p", Routes: func(mux *http.ServeMux) {
+		mux.HandleFunc("GET /api/devices", func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = io.WriteString(w, `{"devices":[]}`)
+		})
+		mux.Handle("POST /api/devices/{device}/set", SameOrigin(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			posted++
+			w.WriteHeader(http.StatusAccepted)
+		})))
+	}}, &fakeBackend{})
+	defer ts.Close()
+
+	do := func(method, path, ctype, origin string, auth bool) (int, http.Header) {
+		req, _ := http.NewRequest(method, ts.URL+path, strings.NewReader(`{}`))
+		if ctype != "" {
+			req.Header.Set("Content-Type", ctype)
+		}
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		if auth {
+			req.SetBasicAuth("u", "p")
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = res.Body.Close() }()
+		_, _ = io.Copy(io.Discard, res.Body)
+		return res.StatusCode, res.Header
+	}
+	if code, _ := do(http.MethodGet, "/api/devices", "", "", false); code != http.StatusUnauthorized {
+		t.Errorf("own route without auth: %d", code)
+	}
+	if code, h := do(http.MethodGet, "/api/devices", "", "", true); code != http.StatusOK || h.Get("Content-Security-Policy") == "" {
+		t.Errorf("own route: %d, CSP %q", code, h.Get("Content-Security-Policy"))
+	}
+	if code, _ := do(http.MethodPost, "/api/devices/d/set", "application/json", "http://evil.example", true); code != http.StatusForbidden {
+		t.Errorf("foreign origin: %d", code)
+	}
+	if code, _ := do(http.MethodPost, "/api/devices/d/set", "text/plain", "", true); code != http.StatusUnsupportedMediaType {
+		t.Errorf("text/plain: %d", code)
+	}
+	if code, _ := do(http.MethodPost, "/api/devices/d/set", "application/json", "", true); code != http.StatusAccepted || posted != 1 {
+		t.Errorf("same origin: %d, posted %d", code, posted)
+	}
+}
+
+// degradedBackend reports a degraded bridge.
+type degradedBackend struct{ fakeBackend }
+
+func (degradedBackend) Health() Health { return Health{Status: "degraded"} }
+
+func TestHealthProbe(t *testing.T) {
+	for _, c := range []struct {
+		probe bool
+		b     Backend
+		want  int
+	}{
+		{false, &degradedBackend{}, http.StatusOK},
+		{true, &degradedBackend{}, http.StatusServiceUnavailable},
+		{true, &fakeBackend{}, http.StatusOK},
+	} {
+		ts := newTestServer(Options{HealthProbe: c.probe}, c.b)
+		var h Health
+		if code := getJSON(t, ts.URL+"/api/health", &h); code != c.want {
+			t.Errorf("probe=%v: status %d, want %d", c.probe, code, c.want)
+		}
+		ts.Close()
+	}
+}
