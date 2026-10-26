@@ -280,7 +280,7 @@ function renderProblems(problems) {
   for (const p of problems) {
     const li = el("li");
     const head = el("div", "p-head");
-    head.appendChild(el("span", "p-event", p.event));
+    head.appendChild(el("span", "p-event", t(p.event)));
     const when = new Date(p.at);
     head.appendChild(el("span", "muted", (p.device ? p.device + " · " : "") + when.toLocaleTimeString(LOCALE)));
     li.appendChild(head);
@@ -512,7 +512,7 @@ function valueTile(e) {
 }
 
 function entryLabel(e) {
-  return e.name || prettify(e.key);
+  return e.name ? t(e.name) : prettify(e.key);
 }
 
 // ---------- control (writable items) ----------

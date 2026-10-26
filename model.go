@@ -127,7 +127,8 @@ type Entry struct {
 	Sub string `json:"sub,omitempty"`
 	// Key identifies the value, and is what an [Item] with the same key
 	// reads its current value from.
-	Key  string `json:"key"`
+	Key string `json:"key"`
+	// Name is an i18n key, or the text itself.
 	Name string `json:"name,omitempty"`
 	Unit string `json:"unit,omitempty"`
 	// Value is a number, string or bool; a select item's value is its
@@ -171,8 +172,9 @@ type Tile struct {
 type Problem struct {
 	At     time.Time `json:"at"`
 	Device string    `json:"device,omitempty"`
-	Event  string    `json:"event"`
-	Detail string    `json:"detail,omitempty"`
+	// Event is an i18n key, or the text itself.
+	Event  string `json:"event"`
+	Detail string `json:"detail,omitempty"`
 }
 
 // Item is one writable value.

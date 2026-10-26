@@ -20,6 +20,10 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- An entry's name and a problem's event are looked up as i18n keys, like
+  tile labels; text that is no key shows as before.
+- The main column no longer grows past the viewport with a wide table;
+  the table scrolls instead.
 - A bridge without any writable item is read-only: the Control section and
   its navigation entry are hidden.
 

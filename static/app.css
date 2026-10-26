@@ -113,7 +113,7 @@ html, body {
 .ghost-btn:hover { color: var(--text); border-color: var(--primary); }
 
 /* ---------- main ---------- */
-.main { padding: 0 26px 40px; max-width: 1200px; }
+.main { padding: 0 26px 40px; max-width: 1200px; min-width: 0; }
 
 .topbar {
   display: flex;
