@@ -74,6 +74,48 @@ type Device struct {
 	// polls its groups at different rates.
 	GroupUpdatedAt map[string]time.Time `json:"group_updated_at,omitempty"`
 	Entries        []Entry              `json:"entries"`
+	// Tables are the device's lists — the access points of a site, its
+	// clients — placed on the page through [Section.Tables].
+	Tables []Table `json:"tables,omitempty"`
+}
+
+// Table is a list of like things, one row each, read-only.
+type Table struct {
+	// ID places the table through [Section.Tables]; Title is an i18n key
+	// (or text) heading its card.
+	ID      string   `json:"id"`
+	Title   string   `json:"title"`
+	Columns []Column `json:"columns"`
+	Rows    []Row    `json:"rows"`
+}
+
+// Column is one table column.
+type Column struct {
+	// Label is an i18n key, or the text itself.
+	Label string `json:"label"`
+	Unit  string `json:"unit,omitempty"`
+	// Format renders the column's cells: "" formats like an entry value,
+	// "duration" and "age" take seconds, "bitrate" bits per second,
+	// "i18n" looks a string cell up as an i18n key.
+	Format string `json:"format,omitempty"`
+	// Align is "right" for numbers; empty aligns left.
+	Align string `json:"align,omitempty"`
+}
+
+// The column formats.
+const (
+	FormatDuration = "duration"
+	FormatAge      = "age"
+	FormatBitrate  = "bitrate"
+	FormatI18n     = "i18n"
+)
+
+// Row is one table row: one cell per [Column], in order. A nil cell shows
+// as a dash.
+type Row struct {
+	Cells []any `json:"cells"`
+	// Tone colours the row: "ok", "warn", "err", "muted" or empty.
+	Tone string `json:"tone,omitempty"`
 }
 
 // Entry is one value of a device.
@@ -175,8 +217,20 @@ type Layout struct {
 	// under "System".
 	Sections []Section `json:"sections"`
 	// SystemGroups orders the groups shown under "System"; unclaimed
-	// groups follow them.
+	// groups follow them. Tables no section claims follow the groups.
 	SystemGroups []string `json:"system_groups,omitempty"`
+	// Links are navigation entries to pages the bridge serves itself
+	// through [Options.Routes] — a schedule editor, a login. Each opens
+	// in place of the dashboard.
+	Links []Link `json:"links,omitempty"`
+}
+
+// Link is one navigation entry to a bridge page.
+type Link struct {
+	// Href is relative ("schedules.html"), so the page also works behind
+	// Home Assistant Ingress; Title is an i18n key (or text).
+	Href  string `json:"href"`
+	Title string `json:"title"`
 }
 
 // Section is one data section of the page.
@@ -194,6 +248,8 @@ type Section struct {
 	// entry that has one, titled by the i18n key SubTitle with {sub}.
 	Subs     bool   `json:"subs,omitempty"`
 	SubTitle string `json:"sub_title,omitempty"`
+	// Tables are the [Table.ID]s shown here, after the groups, in order.
+	Tables []string `json:"tables,omitempty"`
 	// Optional hides the section, navigation entry included, while the
 	// selected device has nothing for it.
 	Optional bool `json:"optional,omitempty"`

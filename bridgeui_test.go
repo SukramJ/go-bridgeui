@@ -329,3 +329,45 @@ func TestHealthProbe(t *testing.T) {
 		ts.Close()
 	}
 }
+
+// tableBackend serves a device with tables whose lists are nil.
+type tableBackend struct{ fakeBackend }
+
+func (tableBackend) Snapshot() Snapshot {
+	return Snapshot{Devices: []Device{{ID: "site", Tables: []Table{
+		{ID: "clients", Title: "table.clients"},
+		{ID: "aps", Columns: []Column{{Label: "Name"}, {Label: "tx", Format: FormatBitrate, Align: "right"}}, Rows: []Row{{Tone: "muted"}}},
+	}}}}
+}
+
+// Tables arrive with lists rather than null, so the SPA can iterate them,
+// and the layout places them and links the bridge's own pages.
+func TestTablesAndLinks(t *testing.T) {
+	layout := Layout{
+		Sections: []Section{{ID: "network", Title: "section.network", Tables: []string{"aps", "clients"}}},
+		Links:    []Link{{Href: "schedules.html", Title: "nav.schedules"}},
+	}
+	ts := newTestServer(Options{Layout: layout}, &tableBackend{})
+	defer ts.Close()
+
+	res, err := http.Get(ts.URL + "/api/snapshot")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	for _, want := range []string{
+		`"columns":[]`, `"rows":[]`, `"cells":[]`, `"format":"bitrate"`, `"align":"right"`, `"tone":"muted"`,
+	} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("snapshot lacks %s: %s", want, body)
+		}
+	}
+
+	var ui uiView
+	getJSON(t, ts.URL+"/api/ui", &ui)
+	if len(ui.Layout.Links) != 1 || ui.Layout.Links[0].Href != "schedules.html" ||
+		len(ui.Layout.Sections[0].Tables) != 2 {
+		t.Errorf("ui = %+v", ui)
+	}
+}

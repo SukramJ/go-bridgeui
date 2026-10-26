@@ -43,8 +43,22 @@ func (s *Server) snapshot() Snapshot {
 		snap.Devices = []Device{}
 	}
 	for i := range snap.Devices {
-		if snap.Devices[i].Entries == nil {
-			snap.Devices[i].Entries = []Entry{}
+		d := &snap.Devices[i]
+		if d.Entries == nil {
+			d.Entries = []Entry{}
+		}
+		for j := range d.Tables {
+			if d.Tables[j].Columns == nil {
+				d.Tables[j].Columns = []Column{}
+			}
+			if d.Tables[j].Rows == nil {
+				d.Tables[j].Rows = []Row{}
+			}
+			for k := range d.Tables[j].Rows {
+				if d.Tables[j].Rows[k].Cells == nil {
+					d.Tables[j].Rows[k].Cells = []any{}
+				}
+			}
 		}
 	}
 	return snap

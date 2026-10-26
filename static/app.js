@@ -19,6 +19,7 @@ let LANG = "en";
 let LOCALE = "en-US";
 let LAYOUT = { brand: "", product: "", icon: "", sections: [], system_groups: [] };
 let groupSection = {}; // entry group -> section id
+let tableSection = {}; // table id -> section id
 let subSection = null; // id of the section that shows Entry.sub cards
 let items = []; // writable items
 let itemsByKey = {};
@@ -113,9 +114,11 @@ function applyLayout(layout) {
   const host = document.getElementById("data-sections");
   const navControl = document.getElementById("nav-control");
   groupSection = {};
+  tableSection = {};
   subSection = null;
   for (const s of LAYOUT.sections || []) {
     for (const g of s.groups || []) groupSection[g] = s.id;
+    for (const tb of s.tables || []) tableSection[tb] = s.id;
     if (s.subs && !subSection) subSection = s.id;
 
     const sec = el("section", "section");
@@ -126,6 +129,9 @@ function applyLayout(layout) {
     const stack = el("div", "group-stack");
     stack.id = "groups-" + s.id;
     sec.appendChild(stack);
+    const tables = el("div", "group-stack");
+    tables.id = "tables-" + s.id;
+    sec.appendChild(tables);
     host.appendChild(sec);
 
     const a = el("a", "nav-item", s.nav || s.title);
@@ -133,6 +139,15 @@ function applyLayout(layout) {
     a.dataset.target = sec.id;
     a.dataset.i18n = s.nav || s.title;
     navControl.before(a);
+  }
+
+  // Links to the bridge's own pages follow the fixed entries.
+  const nav = document.getElementById("nav");
+  for (const l of LAYOUT.links || []) {
+    const a = el("a", "nav-item nav-link", l.title);
+    a.href = l.href;
+    a.dataset.i18n = l.title;
+    nav.appendChild(a);
   }
 }
 
@@ -177,6 +192,8 @@ function render(view) {
   renderDevices(devices);
   renderProblems(latest.health.problems || []);
   renderGroups(dev);
+  renderTables(dev);
+  hideEmptySections();
   renderControls(dev);
   document.getElementById("footer-app").textContent = tf("footer.app", { brand: LAYOUT.brand });
   document.getElementById("last-update").textContent =
@@ -308,14 +325,147 @@ function renderGroups(dev) {
     }
   }
 
+}
+
+// hideEmptySections hides an optional section the selected device has
+// nothing for, and marks an empty mandatory one.
+function hideEmptySections() {
   for (const s of LAYOUT.sections || []) {
-    const empty = !containers[s.id].children.length;
+    const groups = document.getElementById("groups-" + s.id);
+    const empty = !groups.children.length && !document.getElementById("tables-" + s.id).children.length;
     const hide = empty && s.optional;
-    document.getElementById("sec-" + s.id).hidden = hide;
-    const nav = document.querySelector('.nav-item[data-target="sec-' + s.id + '"]');
-    if (nav) nav.hidden = hide;
-    if (empty && !hide) containers[s.id].innerHTML = `<div class="card empty">${t("group.empty")}</div>`;
+    showSection("sec-" + s.id, !hide);
+    if (empty && !hide) groups.innerHTML = `<div class="card empty">${t("group.empty")}</div>`;
   }
+}
+
+function showSection(id, show) {
+  document.getElementById(id).hidden = !show;
+  const nav = document.querySelector('.nav-item[data-target="' + id + '"]');
+  if (nav) nav.hidden = !show;
+}
+
+// ---------- tables ----------
+// renderTables places the selected device's tables into their sections.
+// A table's card is kept across updates and only its rows are redrawn, so
+// a filter being typed keeps its focus while the values move.
+const tableCards = {}; // container id + "/" + table id -> card parts
+function renderTables(dev) {
+  const seen = new Set();
+  for (const tb of (dev && dev.tables) || []) {
+    const host = tableSection[tb.id] ? "tables-" + tableSection[tb.id] : "system-tables";
+    const id = host + "/" + tb.id;
+    seen.add(id);
+    let c = tableCards[id];
+    if (!c) c = tableCards[id] = tableCard();
+    const container = document.getElementById(host);
+    // Keep layout order: the section's tables first, in its order.
+    if (c.card.parentNode !== container) container.appendChild(c.card);
+    fillTable(c, tb);
+  }
+  for (const id of Object.keys(tableCards)) {
+    if (!seen.has(id)) {
+      tableCards[id].card.remove();
+      delete tableCards[id];
+    }
+  }
+}
+
+function tableCard() {
+  const card = el("div", "card table-card");
+  const head = el("div", "group-head");
+  const title = el("h3");
+  const count = el("span", "group-age");
+  head.appendChild(title);
+  head.appendChild(count);
+  const filter = el("input", "table-filter");
+  filter.type = "search";
+  filter.placeholder = t("table.filter");
+  head.appendChild(filter);
+  card.appendChild(head);
+  const wrap = el("div", "table-wrap");
+  const table = el("table", "data-table");
+  const thead = el("thead");
+  const tbody = el("tbody");
+  table.appendChild(thead);
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  card.appendChild(wrap);
+  const c = { card, title, count, filter, thead, tbody, last: null };
+  filter.addEventListener("input", () => c.last && fillTable(c, c.last));
+  return c;
+}
+
+// tableFilterMin is the row count from which a table offers a filter.
+const tableFilterMin = 10;
+
+function fillTable(c, tb) {
+  c.last = tb;
+  c.title.textContent = t(tb.title || tb.id);
+  const cols = tb.columns || [];
+  const rows = tb.rows || [];
+  c.filter.hidden = rows.length < tableFilterMin;
+
+  const sig = JSON.stringify(cols);
+  if (c.thead.dataset.sig !== sig) {
+    c.thead.dataset.sig = sig;
+    c.thead.innerHTML = "";
+    const tr = el("tr");
+    for (const col of cols) {
+      const th = el("th", col.align === "right" ? "num" : null, t(col.label));
+      if (col.unit) th.appendChild(el("span", "unit", col.unit));
+      tr.appendChild(th);
+    }
+    c.thead.appendChild(tr);
+  }
+
+  const q = c.filter.hidden ? "" : c.filter.value.trim().toLocaleLowerCase(LOCALE);
+  c.tbody.innerHTML = "";
+  let shown = 0;
+  for (const r of rows) {
+    const texts = cols.map((col, i) => cellText(col, (r.cells || [])[i]));
+    if (q && !texts.some((x) => x.toLocaleLowerCase(LOCALE).includes(q))) continue;
+    shown++;
+    const tr = el("tr", r.tone ? "tone-" + r.tone : null);
+    texts.forEach((x, i) => tr.appendChild(el("td", cols[i].align === "right" ? "num" : null, x)));
+    c.tbody.appendChild(tr);
+  }
+  if (!rows.length) {
+    const tr = el("tr");
+    const td = el("td", "empty", t("group.empty"));
+    td.colSpan = Math.max(1, cols.length);
+    tr.appendChild(td);
+    c.tbody.appendChild(tr);
+  }
+  c.count.textContent = shown === rows.length
+    ? tf("table.rows", { n: rows.length })
+    : tf("table.shown", { n: shown, total: rows.length });
+}
+
+function cellText(col, v) {
+  if (v === null || v === undefined || v === "") return "–";
+  switch (col.format) {
+    case "duration":
+      return formatUptime(v);
+    case "age":
+      return formatAge(v);
+    case "bitrate":
+      return formatBitrate(v);
+    case "i18n":
+      return t(String(v));
+  }
+  return fmtValue(v);
+}
+
+function formatBitrate(bps) {
+  bps = Number(bps) || 0;
+  const units = ["bit/s", "kbit/s", "Mbit/s", "Gbit/s"];
+  let i = 0;
+  while (bps >= 1000 && i < units.length - 1) {
+    bps /= 1000;
+    i++;
+  }
+  return bps.toLocaleString(LOCALE, { maximumFractionDigits: i ? 1 : 0 }) + " " + units[i];
 }
 
 function groupLabel(g) {
@@ -368,9 +518,11 @@ function entryLabel(e) {
 // ---------- control (writable items) ----------
 // renderControls lists the selected device's writable items. Rows are
 // rebuilt only when the device or its item set changes, so a value typed
-// into a field survives the live updates in between.
+// into a field survives the live updates in between. A bridge with no
+// writable item at all is read-only: it has no control section.
 let controlSig = "";
 function renderControls(dev) {
+  showSection("sec-control", items.length > 0);
   const host = document.getElementById("control-list");
   const values = dev ? currentValues(dev) : {};
   const mine = dev ? items.filter((it) => !it.device || it.device === dev.id) : [];
