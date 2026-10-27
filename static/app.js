@@ -71,7 +71,6 @@ function applyStaticI18n() {
 document.addEventListener("DOMContentLoaded", init);
 
 async function init() {
-  initTheme();
   selected = storageGet(DEVICE_KEY);
   // Layout and language first, so every section exists and every string
   // is localised before the first frame. Relative URLs (no leading slash)
@@ -818,7 +817,7 @@ function streamDot(live) {
   document.getElementById("stream-dot").classList.toggle("live", !!live);
 }
 
-// ---------- nav + theme ----------
+// ---------- nav ----------
 function initNav() {
   const navItems = [...document.querySelectorAll(".nav-item")];
   const sections = navItems
@@ -838,12 +837,210 @@ function initNav() {
   sections.forEach((s) => obs.observe(s));
 }
 
+// ---------- theme ----------
+// Standalone the page carries Home Assistant's default light and dark
+// palettes (app.css) and follows the viewer's saved choice, else the
+// system preference. Inside Home Assistant's Ingress frame it mirrors HA's
+// live theme instead: HA's CSS variables are read off the parent document
+// and copied onto the page's own tokens, light/dark follows HA's
+// background, and the toggle is hidden — HA owns that choice.
+
+// The path the Supervisor serves an add-on's Ingress under
+// (/api/hassio_ingress/<token>/…).
+const HA_INGRESS_SEGMENT = "/api/hassio_ingress/";
+
+// HA_TOKENS maps each of the page's tokens onto the Home Assistant
+// variables it mirrors; the first non-empty one wins. A token HA does not
+// provide keeps the app.css default for the derived light/dark mode.
+const HA_TOKENS = [
+  ["--bg", ["--primary-background-color"]],
+  ["--bg-elev", ["--card-background-color", "--ha-card-background"]],
+  ["--card", ["--card-background-color", "--ha-card-background"]],
+  ["--text", ["--primary-text-color"]],
+  ["--text-soft", ["--secondary-text-color"]],
+  ["--card-border", ["--divider-color"]],
+  ["--sidebar", ["--sidebar-background-color"]],
+  ["--input-bg", ["--input-fill-color", "--secondary-background-color"]],
+  ["--primary", ["--primary-color"]],
+  ["--on-primary", ["--text-primary-color"]],
+  ["--ok", ["--success-color"]],
+  ["--warn", ["--warning-color"]],
+  ["--err", ["--error-color"]],
+  ["--radius-card", ["--ha-card-border-radius"]],
+  ["--card-shadow", ["--ha-card-box-shadow"]],
+  ["--font", ["--ha-font-family-body", "--primary-font-family", "--paper-font-body1_-_font-family"]],
+];
+
 function initTheme() {
-  const saved = storageGet(THEME_KEY);
-  if (saved) document.documentElement.dataset.theme = saved;
-  document.getElementById("theme-toggle").addEventListener("click", () => {
-    const cur = document.documentElement.dataset.theme === "light" ? "dark" : "light";
-    document.documentElement.dataset.theme = cur;
-    storageSet(THEME_KEY, cur);
-  });
+  try {
+    if (startHATheme()) return;
+  } catch (e) {
+    /* not provably Home Assistant — standalone */
+  }
+  initStandaloneTheme();
 }
+
+function initStandaloneTheme() {
+  const root = document.documentElement;
+  let media = null;
+  try {
+    media = window.matchMedia("(prefers-color-scheme: dark)");
+  } catch (e) {
+    /* no media queries — light */
+  }
+  const system = () => (media && media.matches ? "dark" : "light");
+  const saved = () => {
+    const v = storageGet(THEME_KEY);
+    return v === "light" || v === "dark" ? v : null;
+  };
+  root.dataset.theme = saved() || system();
+  if (media) {
+    try {
+      // Follow a system switch until the viewer picks a mode.
+      media.addEventListener("change", () => {
+        if (!saved()) root.dataset.theme = system();
+      });
+    } catch (e) {
+      /* older engine without MediaQueryList events */
+    }
+  }
+  const toggle = document.getElementById("theme-toggle");
+  if (toggle) {
+    toggle.addEventListener("click", () => {
+      const cur = root.dataset.theme === "light" ? "dark" : "light";
+      root.dataset.theme = cur;
+      storageSet(THEME_KEY, cur);
+    });
+  }
+}
+
+// haParentRoot returns Home Assistant's document element when the page is
+// framed by HA, detected positively: framed, with a readable same-origin
+// parent, and either served under the Ingress path or that parent being
+// HA's frontend (<home-assistant>). A cross-origin or unknown framing host
+// gives null.
+function haParentRoot() {
+  try {
+    if (window.self === window.top) return null;
+    const doc = window.parent.document; // throws when cross-origin
+    const ingress = window.location.pathname.includes(HA_INGRESS_SEGMENT);
+    if (ingress || doc.querySelector("home-assistant") !== null) return doc.documentElement;
+  } catch (e) {
+    /* cross-origin or unreadable parent */
+  }
+  return null;
+}
+
+// startHATheme mirrors HA's theme and keeps it in step; false (and nothing
+// changed) when the page is not in HA or the first read fails.
+function startHATheme() {
+  const parentRoot = haParentRoot();
+  if (!parentRoot) return false;
+  const parentWin = window.parent;
+  if (!applyHATheme(parentWin, parentRoot)) return false;
+  document.documentElement.dataset.embed = "ha";
+  const reapply = () => applyHATheme(parentWin, parentRoot);
+  try {
+    // HA writes a theme switch onto its root element's style and class.
+    new MutationObserver(reapply).observe(parentRoot, {
+      attributes: true,
+      attributeFilter: ["style", "class"],
+    });
+  } catch (e) {
+    /* focus and visibility below still catch a change */
+  }
+  window.addEventListener("focus", reapply);
+  document.addEventListener("visibilitychange", reapply);
+  return true;
+}
+
+// applyHATheme copies HA's current variables onto the page's tokens and
+// derives light/dark from HA's background. On any failure the last good
+// values stay and false is returned.
+function applyHATheme(parentWin, parentRoot) {
+  try {
+    const cs = parentWin.getComputedStyle(parentRoot);
+    const read = (name) => cs.getPropertyValue(name).trim();
+    const style = document.documentElement.style;
+    let mode = null;
+    const rgb = parseColor(read("--primary-background-color") || cs.backgroundColor);
+    if (rgb) mode = isDark(rgb) ? "dark" : "light";
+    const values = HA_TOKENS.map(([token, vars]) => {
+      let value = "";
+      for (const v of vars) {
+        value = read(v);
+        if (value) break;
+      }
+      return [token, value];
+    });
+    // Write only after every read succeeded, so a parent that turns
+    // unreadable mid-way leaves no half-applied theme.
+    if (mode) {
+      document.documentElement.dataset.theme = mode;
+      style.colorScheme = mode;
+    }
+    for (const [token, value] of values) {
+      if (value) style.setProperty(token, value);
+      else style.removeProperty(token); // HA dropped it: back to the default
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// isDark reports whether light text reads better than dark text on the
+// background: below a relative luminance of about 0.18 white text has the
+// higher WCAG contrast.
+function isDark([r, g, b]) {
+  const lin = (c) => {
+    c /= 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b) < 0.179;
+}
+
+// parseColor turns a CSS colour into [r, g, b], or null for a transparent
+// or unparsable one. Hex and rgb()/rgba() are read directly; anything else
+// (a named colour, hsl()) goes through a canvas, which normalises it.
+function parseColor(value) {
+  if (!value) return null;
+  let rgb = parseRGB(value);
+  if (rgb === undefined) {
+    try {
+      const ctx = document.createElement("canvas").getContext("2d");
+      ctx.fillStyle = "#010203"; // a sentinel an invalid value leaves in place
+      ctx.fillStyle = value;
+      rgb = ctx.fillStyle === "#010203" && value.trim() !== "#010203" ? null : parseRGB(ctx.fillStyle);
+    } catch (e) {
+      rgb = null;
+    }
+  }
+  return rgb || null;
+}
+
+// parseRGB reads #rgb, #rgba, #rrggbb, #rrggbbaa and rgb()/rgba() in comma
+// or space syntax. undefined means "not one of those", null "transparent".
+function parseRGB(value) {
+  const v = value.trim().toLowerCase();
+  let m = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/.exec(v);
+  if (m) {
+    let h = m[1];
+    if (h.length <= 4) h = [...h].map((c) => c + c).join("");
+    const n = (i) => parseInt(h.slice(i, i + 2), 16);
+    if (h.length === 8 && n(6) === 0) return null;
+    return [n(0), n(2), n(4)];
+  }
+  m = /^rgba?\(\s*([\d.]+%?)[\s,]+([\d.]+%?)[\s,]+([\d.]+%?)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/.exec(v);
+  if (m) {
+    const ch = (s) => (s.endsWith("%") ? (parseFloat(s) * 255) / 100 : parseFloat(s));
+    if (m[4] !== undefined && parseFloat(m[4]) === 0) return null;
+    return [ch(m[1]), ch(m[2]), ch(m[3])];
+  }
+  return undefined;
+}
+
+// The script sits at the end of <body>: run the theme before the first
+// paint rather than on DOMContentLoaded, so the page never flashes the
+// wrong mode.
+initTheme();

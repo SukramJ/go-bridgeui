@@ -371,3 +371,66 @@ func TestTablesAndLinks(t *testing.T) {
 		t.Errorf("ui = %+v", ui)
 	}
 }
+
+// Every colour in app.css is a token: a literal colour may only appear in a
+// custom-property declaration, so the Home Assistant theme app.js copies
+// onto the tokens reaches every element.
+func TestStylesheetColoursAreTokens(t *testing.T) {
+	b, err := staticFS.ReadFile("static/app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := regexp.MustCompile(`(?s)/\*.*?\*/`).ReplaceAllString(string(b), "")
+	colour := regexp.MustCompile(`#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch|hwb)\(|\b(?:white|black)\b`)
+	for _, decl := range regexp.MustCompile(`[{;]\s*([-a-zA-Z]+)\s*:([^;{}]*)`).FindAllStringSubmatch(css, -1) {
+		prop, value := decl[1], decl[2]
+		if strings.HasPrefix(prop, "--") {
+			continue
+		}
+		if c := colour.FindString(value); c != "" {
+			t.Errorf("%s: %s hard-codes %q; use a token", prop, strings.TrimSpace(value), c)
+		}
+	}
+}
+
+// Each token app.js maps a Home Assistant variable onto is declared in
+// app.css, and both palettes define the same set of tokens.
+func TestHomeAssistantTokenMapping(t *testing.T) {
+	js, err := staticFS.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css, err := staticFS.ReadFile("static/app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := regexp.MustCompile(`(?s)const HA_TOKENS = \[(.*?)\n\];`).FindSubmatch(js)
+	if block == nil {
+		t.Fatal("HA_TOKENS not found in app.js")
+	}
+	mapped := regexp.MustCompile(`\["(--[a-z-]+)", \[`).FindAllSubmatch(block[1], -1)
+	if len(mapped) < 10 {
+		t.Fatalf("HA_TOKENS maps %d tokens", len(mapped))
+	}
+	for _, m := range mapped {
+		if !regexp.MustCompile(`(?m)^\s*` + regexp.QuoteMeta(string(m[1])) + `:`).Match(css) {
+			t.Errorf("app.js maps %s, which app.css does not declare", m[1])
+		}
+	}
+
+	palette := func(theme string) []string {
+		m := regexp.MustCompile(`(?s)\[data-theme="` + theme + `"\] \{(.*?)\}`).FindSubmatch(css)
+		if m == nil {
+			t.Fatalf("no %s palette", theme)
+		}
+		decls := regexp.MustCompile(`(--[a-z-]+):`).FindAllSubmatch(m[1], -1)
+		names := make([]string, 0, len(decls))
+		for _, d := range decls {
+			names = append(names, string(d[1]))
+		}
+		return names
+	}
+	if l, d := strings.Join(palette("light"), ","), strings.Join(palette("dark"), ","); l != d {
+		t.Errorf("light palette %s differs from dark %s", l, d)
+	}
+}

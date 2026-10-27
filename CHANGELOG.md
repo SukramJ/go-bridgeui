@@ -5,6 +5,27 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-27
+
+### Changed
+
+- The dashboard looks like Home Assistant instead of its own navy theme:
+  HA's default light and dark palettes, flat cards with a divider border
+  and a 12px radius, Roboto. Without a saved choice it follows the
+  system's light/dark preference; the toggle and the saved choice work as
+  before.
+- Inside Home Assistant's Ingress frame the dashboard mirrors HA's live
+  theme — background, cards, text, divider, sidebar, inputs, primary and
+  state colours, card radius and shadow, font — and follows HA's light/dark
+  and every theme switch. The light/dark toggle is hidden there; HA owns
+  that choice. Framing is detected positively (the Ingress path, or a
+  readable parent that is HA's frontend); any other host, or a
+  cross-origin one, gets the standalone look.
+- Every colour in the stylesheet is now a token, so a custom HA theme
+  reaches status chips, tables, inputs, buttons, navigation and toasts.
+  State colours used as text are mixed toward the text colour so they stay
+  readable in both modes; toasts are tinted cards instead of solid colour.
+
 ## [0.3.0] - 2026-10-26
 
 ### Added
