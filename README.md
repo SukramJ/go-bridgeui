@@ -15,8 +15,9 @@ maintained once and embedded by each bridge.
 - One single-page app: status & health, recent problems, live values,
   sub-unit cards (battery packs), configuration, and a control list for
   numbers, selects, switches and buttons, with confirmation where a bridge
-  asks for it. Light/dark theme, German and English. A device picker
-  appears when a bridge serves several devices.
+  asks for it. Home Assistant's look in light and dark; inside HA's
+  Ingress frame it follows HA's live theme. German and English. A device
+  picker appears when a bridge serves several devices.
 - Plain HTML/CSS/JS embedded with `go:embed`: no build step, no CDN, no
   third-party Go dependency. It works behind Home Assistant Ingress.
 

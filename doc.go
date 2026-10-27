@@ -32,4 +32,4 @@
 package bridgeui
 
 // Version is the module's release, the fallback asset validator.
-const Version = "0.3.0"
+const Version = "0.4.0"
